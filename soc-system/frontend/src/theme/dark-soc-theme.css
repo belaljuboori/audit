@@ -1,0 +1,156 @@
+:root {
+  --soc-bg: #0b0f14;
+  --soc-surface: #121820;
+  --soc-surface-raised: #1a222d;
+  --soc-border: #263140;
+  --soc-text: #e6edf3;
+  --soc-text-muted: #8b98a5;
+  --soc-accent: #2f81f7;
+  --soc-danger: #f85149;
+  --soc-warning: #d29922;
+  --soc-success: #3fb950;
+  --soc-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--soc-bg);
+  color: var(--soc-text);
+  font-family: var(--soc-font);
+}
+
+.soc-center-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.soc-card {
+  background: var(--soc-surface);
+  border: 1px solid var(--soc-border);
+  border-radius: 12px;
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.soc-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 24px;
+  color: var(--soc-text);
+}
+
+.soc-field {
+  margin-bottom: 16px;
+}
+
+.soc-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.875rem;
+  color: var(--soc-text-muted);
+}
+
+.soc-field input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--soc-surface-raised);
+  border: 1px solid var(--soc-border);
+  border-radius: 8px;
+  color: var(--soc-text);
+  font-size: 1rem;
+}
+
+.soc-field input:focus {
+  outline: 2px solid var(--soc-accent);
+  outline-offset: 1px;
+}
+
+.soc-button {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--soc-accent);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.soc-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.soc-error {
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid var(--soc-danger);
+  color: #ffb4ae;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  margin-bottom: 16px;
+}
+
+.soc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--soc-border);
+  background: var(--soc-surface);
+}
+
+.soc-app-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.soc-lang-toggle {
+  background: transparent;
+  border: 1px solid var(--soc-border);
+  color: var(--soc-text-muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.soc-content {
+  padding: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.soc-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: var(--soc-surface-raised);
+  border: 1px solid var(--soc-border);
+  margin: 0 4px 4px 0;
+}
+
+.soc-notice {
+  background: rgba(210, 153, 34, 0.12);
+  border: 1px solid var(--soc-warning);
+  color: #f0c674;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-top: 24px;
+}
