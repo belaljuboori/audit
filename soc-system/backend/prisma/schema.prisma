@@ -1,0 +1,338 @@
+// SOC Live Monitoring System — Phase 1 schema
+// Identity, RBAC, audit and settings backbone. Later phases (nodes, connectors,
+// AD, GPO, compliance, reporting) add their own migrations on top of this file.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql" // MariaDB is wire-compatible; connection uses mysql2-based driver
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  LOCKED
+}
+
+enum AuditResult {
+  SUCCESS
+  FAILURE
+  DENIED
+}
+
+enum NodeType {
+  FORTIGATE
+  FORTIWEB
+  ACTIVE_DIRECTORY
+  GPO_COLLECTOR
+}
+
+enum NodeEnvironment {
+  PRODUCTION
+  UAT
+  DR
+}
+
+enum NodeAuthMethod {
+  API_TOKEN
+  USERNAME_PASSWORD
+  SERVICE_ACCOUNT
+  LDAP_BIND
+}
+
+enum NodeCredentialType {
+  API_TOKEN
+  PASSWORD
+  SERVICE_ACCOUNT_JSON
+  LDAP_BIND_PASSWORD
+}
+
+enum NodeHealthStatus {
+  UNKNOWN
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  DISABLED
+  MAINTENANCE
+}
+
+enum HealthCheckSource {
+  MANUAL_TEST
+  SCHEDULED
+}
+
+enum CollectorStatus {
+  STOPPED
+  RUNNING
+  PAUSED
+  ERROR
+}
+
+enum CollectorRunResult {
+  SUCCESS
+  FAILURE
+}
+
+model User {
+  id                 String     @id @default(uuid())
+  username           String     @unique @db.VarChar(64)
+  email              String     @unique @db.VarChar(255)
+  passwordHash       String     @map("password_hash") @db.VarChar(255)
+  fullName           String     @map("full_name") @db.VarChar(255)
+  status             UserStatus @default(ACTIVE)
+  failedLoginCount   Int        @default(0) @map("failed_login_count")
+  lockedUntil        DateTime?  @map("locked_until")
+  lastLoginAt        DateTime?  @map("last_login_at")
+  lastLoginIp        String?    @map("last_login_ip") @db.VarChar(45)
+  passwordChangedAt  DateTime   @default(now()) @map("password_changed_at")
+  mustChangePassword Boolean    @default(false) @map("must_change_password")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
+
+  roles              UserRole[]
+  refreshTokens      RefreshToken[]
+  updatedSettings    SystemSetting[]
+  createdNodes       Node[]           @relation("NodeCreatedBy")
+  updatedNodes       Node[]           @relation("NodeUpdatedBy")
+  rotatedCredentials NodeCredential[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique @db.VarChar(64)
+  description String?  @db.VarChar(255)
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique @db.VarChar(128)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  assignedBy String?  @map("assigned_by")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  tokenHash    String    @unique @map("token_hash") @db.VarChar(128)
+  familyId     String    @map("family_id")
+  issuedAt     DateTime  @default(now()) @map("issued_at")
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+  replacedById String?   @map("replaced_by_id")
+  ipAddress    String?   @map("ip_address") @db.VarChar(45)
+  userAgent    String?   @map("user_agent") @db.VarChar(512)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+// Insert-only from the application's point of view. The DB grants for the
+// application user additionally omit UPDATE/DELETE on this table (see
+// docker/mariadb/init/01-app-user.sql) so tampering requires DB-admin access.
+model AuditLog {
+  id                    BigInt      @id @default(autoincrement())
+  actorUserId           String?     @map("actor_user_id")
+  actorUsernameSnapshot String?     @map("actor_username_snapshot") @db.VarChar(64)
+  action                String      @db.VarChar(128)
+  targetType            String?     @map("target_type") @db.VarChar(64)
+  targetId              String?     @map("target_id") @db.VarChar(128)
+  result                AuditResult
+  ipAddress             String?     @map("ip_address") @db.VarChar(45)
+  userAgent             String?     @map("user_agent") @db.VarChar(512)
+  metadata              Json?
+  createdAt             DateTime    @default(now()) @map("created_at")
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  key         String   @id @db.VarChar(128)
+  value       Json
+  description String?  @db.VarChar(255)
+  updatedById String?  @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@map("system_settings")
+}
+
+// Configuration for a monitored device/directory (FortiGate, FortiWeb, AD,
+// GPO collector). Deliberately holds NO secrets — see NodeCredential, which
+// is a separate table so a schema/backup dump of `nodes` alone never carries
+// key material, even encrypted.
+model Node {
+  id          String          @id @default(uuid())
+  name        String          @db.VarChar(128)
+  type        NodeType
+  description String?         @db.VarChar(500)
+  environment NodeEnvironment @default(PRODUCTION)
+  enabled     Boolean         @default(true)
+
+  // Connectivity
+  host                String  @db.VarChar(255) // management IP or FQDN
+  port                Int
+  apiBaseUrl          String? @map("api_base_url") @db.VarChar(500)
+  apiVersion          String? @map("api_version") @db.VarChar(32)
+  vdom                String? @db.VarChar(64)
+  tlsVerify           Boolean @default(true) @map("tls_verify")
+  customCaCertificate String? @map("custom_ca_certificate") @db.Text // PEM, optional
+
+  // Auth (method only — the secret itself lives in NodeCredential)
+  authMethod NodeAuthMethod @map("auth_method")
+
+  // Collection behavior
+  pollingIntervalSeconds Int  @default(300) @map("polling_interval_seconds")
+  syslogPort             Int? @map("syslog_port")
+  connectionTimeoutMs    Int  @default(5000) @map("connection_timeout_ms")
+  retryMaxAttempts       Int  @default(3) @map("retry_max_attempts")
+  retryBackoffMs         Int  @default(2000) @map("retry_backoff_ms")
+
+  // Observed state (written by the test-connection workflow and the collector)
+  lastSuccessfulConnectionAt DateTime?        @map("last_successful_connection_at")
+  lastCollectionAt           DateTime?        @map("last_collection_at")
+  currentHealth              NodeHealthStatus @default(UNKNOWN) @map("current_health")
+  currentLatencyMs           Int?             @map("current_latency_ms")
+  lastError                  String?          @map("last_error") @db.VarChar(1000) // always sanitized before storage
+
+  createdById String?  @map("created_by")
+  updatedById String?  @map("updated_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy    User?             @relation("NodeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy    User?             @relation("NodeUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  credential   NodeCredential?
+  healthChecks NodeHealthCheck[]
+  collector    Collector?
+
+  @@index([type])
+  @@index([environment])
+  @@map("nodes")
+}
+
+// Deliberately a separate table from `nodes` so a dump/export/report built
+// from node configuration data never touches this table by accident.
+// `encryptedSecret` is AES-256-GCM ciphertext produced by EncryptionService
+// — never a plaintext value, even transiently in a column default.
+model NodeCredential {
+  id              String             @id @default(uuid())
+  nodeId          String             @unique @map("node_id")
+  credentialType  NodeCredentialType @map("credential_type")
+  encryptedSecret String             @map("encrypted_secret") @db.Text
+  rotatedAt       DateTime           @default(now()) @map("rotated_at")
+  rotatedById     String?            @map("rotated_by")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  node      Node  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  rotatedBy User? @relation(fields: [rotatedById], references: [id], onDelete: SetNull)
+
+  @@map("node_credentials")
+}
+
+// History of connectivity checks (manual "Test Connection" runs and the
+// collector's own scheduled heartbeat checks) — what docs/phase1 called out
+// as `node_health_checks` in the target schema.
+model NodeHealthCheck {
+  id           String            @id @default(uuid())
+  nodeId       String            @map("node_id")
+  checkedAt    DateTime          @default(now()) @map("checked_at")
+  status       NodeHealthStatus
+  latencyMs    Int?              @map("latency_ms")
+  errorMessage String?           @map("error_message") @db.VarChar(1000)
+  source       HealthCheckSource
+  stepsJson    Json?             @map("steps_json") // per-step test-connection results, secrets already stripped
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId, checkedAt])
+  @@map("node_health_checks")
+}
+
+// One collector per node: the generic scheduling/lifecycle runtime a Phase 3+
+// device-specific adapter plugs into. In Phase 2 the job it runs is the same
+// connectivity heartbeat as the manual test-connection workflow — there is no
+// FortiGate/FortiWeb/AD polling logic yet, so this is intentionally the
+// smallest real thing a "collector" can do before an adapter exists.
+model Collector {
+  id              String          @id @default(uuid())
+  nodeId          String          @unique @map("node_id")
+  status          CollectorStatus @default(STOPPED)
+  lastStartedAt   DateTime?       @map("last_started_at")
+  lastStoppedAt   DateTime?       @map("last_stopped_at")
+  lastHeartbeatAt DateTime?       @map("last_heartbeat_at")
+  lastError       String?         @map("last_error") @db.VarChar(1000)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  node Node           @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  runs CollectorRun[]
+
+  @@map("collectors")
+}
+
+model CollectorRun {
+  id              String              @id @default(uuid())
+  collectorId     String              @map("collector_id")
+  startedAt       DateTime            @default(now()) @map("started_at")
+  finishedAt      DateTime?           @map("finished_at")
+  result          CollectorRunResult?
+  eventsCollected Int                 @default(0) @map("events_collected")
+  errorMessage    String?             @map("error_message") @db.VarChar(1000)
+
+  collector Collector @relation(fields: [collectorId], references: [id], onDelete: Cascade)
+
+  @@index([collectorId, startedAt])
+  @@map("collector_runs")
+}
