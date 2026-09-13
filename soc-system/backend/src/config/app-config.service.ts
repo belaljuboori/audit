@@ -32,6 +32,7 @@ export class AppConfigService {
       host: this.configService.get('REDIS_HOST', { infer: true }),
       port: this.configService.get('REDIS_PORT', { infer: true }),
       password: this.configService.get('REDIS_PASSWORD', { infer: true }) || undefined,
+      db: this.configService.get('REDIS_DB', { infer: true }),
     };
   }
 

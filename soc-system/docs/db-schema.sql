@@ -140,13 +140,99 @@ CREATE TABLE `system_settings` (
     PRIMARY KEY (`key`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- ── nodes (stub only in Phase 1 — see docs/phase1-architecture.md §3) ──────
+-- ── nodes (Phase 2 — full configuration; secrets live in node_credentials, never here) ──
 CREATE TABLE `nodes` (
     `id` VARCHAR(191) NOT NULL,
     `name` VARCHAR(128) NOT NULL,
     `type` ENUM('FORTIGATE', 'FORTIWEB', 'ACTIVE_DIRECTORY', 'GPO_COLLECTOR') NOT NULL,
+    `description` VARCHAR(500) NULL,
+    `environment` ENUM('PRODUCTION', 'UAT', 'DR') NOT NULL DEFAULT 'PRODUCTION',
+    `enabled` BOOLEAN NOT NULL DEFAULT true,
+    `host` VARCHAR(255) NOT NULL,
+    `port` INTEGER NOT NULL,
+    `api_base_url` VARCHAR(500) NULL,
+    `api_version` VARCHAR(32) NULL,
+    `vdom` VARCHAR(64) NULL,
+    `tls_verify` BOOLEAN NOT NULL DEFAULT true,
+    `custom_ca_certificate` TEXT NULL,
+    `auth_method` ENUM('API_TOKEN', 'USERNAME_PASSWORD', 'SERVICE_ACCOUNT', 'LDAP_BIND') NOT NULL,
+    `polling_interval_seconds` INTEGER NOT NULL DEFAULT 300,
+    `syslog_port` INTEGER NULL,
+    `connection_timeout_ms` INTEGER NOT NULL DEFAULT 5000,
+    `retry_max_attempts` INTEGER NOT NULL DEFAULT 3,
+    `retry_backoff_ms` INTEGER NOT NULL DEFAULT 2000,
+    `last_successful_connection_at` DATETIME(3) NULL,
+    `last_collection_at` DATETIME(3) NULL,
+    `current_health` ENUM('UNKNOWN', 'HEALTHY', 'DEGRADED', 'UNHEALTHY', 'DISABLED', 'MAINTENANCE') NOT NULL DEFAULT 'UNKNOWN',
+    `current_latency_ms` INTEGER NULL,
+    `last_error` VARCHAR(1000) NULL,
+    `created_by` VARCHAR(191) NULL,
+    `updated_by` VARCHAR(191) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
 
+    INDEX `nodes_type_idx`(`type`),
+    INDEX `nodes_environment_idx`(`environment`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ── node_credentials (separate table — see docs/phase1-architecture.md §3 for why) ──
+CREATE TABLE `node_credentials` (
+    `id` VARCHAR(191) NOT NULL,
+    `node_id` VARCHAR(191) NOT NULL,
+    `credential_type` ENUM('API_TOKEN', 'PASSWORD', 'SERVICE_ACCOUNT_JSON', 'LDAP_BIND_PASSWORD') NOT NULL,
+    `encrypted_secret` TEXT NOT NULL,
+    `rotated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `rotated_by` VARCHAR(191) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `node_credentials_node_id_key`(`node_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ── node_health_checks ───────────────────────────────────────────────────
+CREATE TABLE `node_health_checks` (
+    `id` VARCHAR(191) NOT NULL,
+    `node_id` VARCHAR(191) NOT NULL,
+    `checked_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `status` ENUM('UNKNOWN', 'HEALTHY', 'DEGRADED', 'UNHEALTHY', 'DISABLED', 'MAINTENANCE') NOT NULL,
+    `latency_ms` INTEGER NULL,
+    `error_message` VARCHAR(1000) NULL,
+    `source` ENUM('MANUAL_TEST', 'SCHEDULED') NOT NULL,
+    `steps_json` JSON NULL,
+
+    INDEX `node_health_checks_node_id_checked_at_idx`(`node_id`, `checked_at`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ── collectors (one per node — see docs/phase2-architecture.md) ─────────────
+CREATE TABLE `collectors` (
+    `id` VARCHAR(191) NOT NULL,
+    `node_id` VARCHAR(191) NOT NULL,
+    `status` ENUM('STOPPED', 'RUNNING', 'PAUSED', 'ERROR') NOT NULL DEFAULT 'STOPPED',
+    `last_started_at` DATETIME(3) NULL,
+    `last_stopped_at` DATETIME(3) NULL,
+    `last_heartbeat_at` DATETIME(3) NULL,
+    `last_error` VARCHAR(1000) NULL,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL,
+
+    UNIQUE INDEX `collectors_node_id_key`(`node_id`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- ── collector_runs ───────────────────────────────────────────────────────
+CREATE TABLE `collector_runs` (
+    `id` VARCHAR(191) NOT NULL,
+    `collector_id` VARCHAR(191) NOT NULL,
+    `started_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `finished_at` DATETIME(3) NULL,
+    `result` ENUM('SUCCESS', 'FAILURE') NULL,
+    `events_collected` INTEGER NOT NULL DEFAULT 0,
+    `error_message` VARCHAR(1000) NULL,
+
+    INDEX `collector_runs_collector_id_started_at_idx`(`collector_id`, `started_at`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -157,6 +243,13 @@ ALTER TABLE `role_permissions` ADD CONSTRAINT `role_permissions_role_id_fkey` FO
 ALTER TABLE `role_permissions` ADD CONSTRAINT `role_permissions_permission_id_fkey` FOREIGN KEY (`permission_id`) REFERENCES `permissions`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `refresh_tokens` ADD CONSTRAINT `refresh_tokens_user_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE `system_settings` ADD CONSTRAINT `system_settings_updated_by_fkey` FOREIGN KEY (`updated_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `nodes` ADD CONSTRAINT `nodes_created_by_fkey` FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `nodes` ADD CONSTRAINT `nodes_updated_by_fkey` FOREIGN KEY (`updated_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `node_credentials` ADD CONSTRAINT `node_credentials_node_id_fkey` FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `node_credentials` ADD CONSTRAINT `node_credentials_rotated_by_fkey` FOREIGN KEY (`rotated_by`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `node_health_checks` ADD CONSTRAINT `node_health_checks_node_id_fkey` FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `collectors` ADD CONSTRAINT `collectors_node_id_fkey` FOREIGN KEY (`node_id`) REFERENCES `nodes`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `collector_runs` ADD CONSTRAINT `collector_runs_collector_id_fkey` FOREIGN KEY (`collector_id`) REFERENCES `collectors`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- ── Prisma migration bookkeeping table ──────────────────────────────────
 -- Only needed if you intend for the Node.js application (via Prisma) to

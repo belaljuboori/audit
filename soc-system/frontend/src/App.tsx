@@ -1,7 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
+import { AppLayout } from './app/AppLayout';
 import { DashboardShell } from './features/dashboard/DashboardShell';
+import { NodesPage } from './features/nodes/NodesPage';
 
 export function App() {
   return (
@@ -9,13 +11,15 @@ export function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route
-          path="/dashboard"
           element={
             <ProtectedRoute>
-              <DashboardShell />
+              <AppLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route path="/dashboard" element={<DashboardShell />} />
+          <Route path="/nodes" element={<NodesPage />} />
+        </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

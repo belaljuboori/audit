@@ -9,8 +9,8 @@ export class RedisHealthIndicator extends HealthIndicator implements OnModuleDes
 
   constructor(config: AppConfigService) {
     super();
-    const { host, port, password } = config.redis;
-    this.client = new Redis({ host, port, password, lazyConnect: true, maxRetriesPerRequest: 1 });
+    const { host, port, password, db } = config.redis;
+    this.client = new Redis({ host, port, password, db, lazyConnect: true, maxRetriesPerRequest: 1 });
   }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {

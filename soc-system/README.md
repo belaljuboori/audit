@@ -10,24 +10,30 @@ phase's tests run and reported before moving to the next.
 > `server.js` prototype at the repository root (a simple manual
 > record-entry tool). Nothing here modifies or depends on that code.
 
-## Status: Phase 1 complete (Architecture & Foundation)
+## Status: Phase 2 complete (Node Management)
 
-See `docs/phase1-architecture.md` for the full design (architecture,
-threat model, folder structure, ERD, security model, assumptions) and
-`docs/phase1-test-report.md` for the actual, reproduced test results —
+See `docs/phase1-architecture.md` / `docs/phase2-architecture.md` for the
+full design (architecture, threat model, folder structure, ERD, security
+model, assumptions) and `docs/phase1-test-report.md` /
+`docs/phase2-test-report.md` for the actual, reproduced test results —
 including an honest list of what has and hasn't been verified yet.
 
-What exists right now: project scaffolding for the backend (NestJS +
-TypeScript + Prisma + MariaDB) and frontend (React + Vite + TypeScript),
-Argon2id authentication with rotating-refresh-token sessions, fine-grained
-RBAC (5 default roles, permission-catalog-driven), an insert-only
+What exists right now: the Phase 1 foundation (NestJS + TypeScript + Prisma
++ MariaDB backend, React + Vite + TypeScript frontend, Argon2id auth with
+rotating-refresh-token sessions, fine-grained RBAC, an insert-only
 administrative audit log enforced at the database grant level, health
-checks, and a Docker Compose / Nginx deployment topology.
+checks, Docker Compose / Nginx topology) plus Phase 2's Node Management:
+full node CRUD with AES-256-GCM-encrypted credentials stored in their own
+table, a real (not mocked) Test Connection workflow, and a BullMQ/Redis-
+backed collector lifecycle (start/stop/restart/pause/resume, bulk
+operations, maintenance mode, re-authentication on sensitive actions,
+duplicate-click protection) — exposed through an "Integrations & Nodes"
+admin page in the frontend.
 
-What does not exist yet: FortiGate/FortiWeb/Active Directory connectors,
-GPO assessment, PCI DSS compliance mapping, reporting, and the full
-dashboard UI — see `docs/known-limitations-phase1.md` and the phase plan
-below.
+What does not exist yet: FortiGate/FortiWeb/Active Directory data
+collection, GPO assessment, PCI DSS compliance mapping, reporting, an
+Alerting Engine, and the full dashboard UI — see
+`docs/known-limitations-phase2.md` and the phase plan below.
 
 ## Repository layout
 
@@ -41,12 +47,13 @@ soc-system/
 
 ## Quick start
 
-See `docs/installation-guide-phase1.md`.
+See `docs/installation-guide-phase1.md` (still accurate for setup) and
+`docs/phase2-architecture.md` for what Node Management adds on top.
 
 ## Phase plan
 
-1. **Architecture & Foundation** — ✅ this delivery
-2. Node Management (Admin Nodes page, encrypted credentials, connection testing, collector lifecycle)
+1. **Architecture & Foundation** — ✅ complete
+2. **Node Management** (Admin Nodes page, encrypted credentials, connection testing, collector lifecycle) — ✅ complete
 3. FortiGate (REST + Syslog, VPN sessions, WAN threats, live dashboard)
 4. FortiWeb (attack log parsing, live attacks dashboard, data masking)
 5. Active Directory (LDAPS, nested privilege resolution, least-privilege risk engine)

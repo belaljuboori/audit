@@ -194,4 +194,14 @@ export class UsersService {
   isLocked(user: { lockedUntil: Date | null }): boolean {
     return !!user.lockedUntil && user.lockedUntil.getTime() > Date.now();
   }
+
+  /** Used by ReAuthGuard to confirm the caller's current password before a sensitive action. */
+  async verifyPassword(userId: string, password: string): Promise<boolean> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { passwordHash: true },
+    });
+    if (!user) return false;
+    return argon2.verify(user.passwordHash, password);
+  }
 }

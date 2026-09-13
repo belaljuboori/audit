@@ -27,3 +27,8 @@ export async function cleanupUser(userId: string) {
   await testPrisma.userRole.deleteMany({ where: { userId } });
   await testPrisma.user.delete({ where: { id: userId } }).catch(() => undefined);
 }
+
+export async function cleanupNode(nodeId: string) {
+  // Cascades to node_credentials, node_health_checks, collectors, collector_runs.
+  await testPrisma.node.delete({ where: { id: nodeId } }).catch(() => undefined);
+}
